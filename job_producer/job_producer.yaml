@@ -1,0 +1,30 @@
+---
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: inventory-job-publisher
+spec:
+  schedule: "0 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: inventory-job-publisher
+            image: <url to producer image>
+            env:
+              - name: PROJECT_ID
+                value: serverless-forseti
+              - name: TOPIC_NAME
+                value: my-work-queue
+              - name: GOOGLE_APPLICATION_CREDENTIALS
+                value: /app/secrets/svc_acct_key.json
+            volumeMounts:
+            - name: config
+              mountPath: "/app/secrets"
+              readOnly: true
+          volumes:
+          - name: config
+            secret:
+              secretName: inventory-job-publisher-config
+          restartPolicy: Never

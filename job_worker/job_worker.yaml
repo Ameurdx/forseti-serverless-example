@@ -1,0 +1,78 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-workers
+spec:
+  selector:
+    matchLabels:
+      app: inventory-worker
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        app: inventory-worker
+    spec:
+      containers:
+      - name: inventory-worker
+        image: <url to worker image>
+        env:
+          - name: PROJECT_ID
+            value: serverless-forseti
+          - name: SUBSCRIPTION_NAME
+            value: forseti-subscription
+          - name: KEY_FILE
+            value: /app/secrets/svc_acct_key.json
+          - name: DB_CONN_FILE
+            value: /app/secrets/db_conn_string.txt
+        volumeMounts:
+        - name: config
+          mountPath: "/app/secrets"
+          readOnly: true
+      volumes:
+      - name: config
+        secret:
+          secretName: inventory-worker-config
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: cloudsqlproxy
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: cloudsqlproxy
+    spec:
+      containers:
+      - image: b.gcr.io/cloudsql-docker/gce-proxy:latest
+        imagePullPolicy: Always
+        name: cloudsqlproxy
+        command:
+        - /cloud_sql_proxy
+        - -dir=/cloudsql
+        - -instances=serverless-forseti:us-central1:forseti-db=tcp:0.0.0.0:3306
+        - -credential_file=/app/secrets/credentials.json
+        ports:
+          - containerPort: 3306
+        volumeMounts:
+        - mountPath: /app/secrets
+          name: credentials
+      volumes:
+      - name: credentials
+        secret:
+          secretName: inventory-cloud-sql-creds
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudsql
+  labels:
+    app: cloudsqlproxy
+spec:
+  ports:
+  - port: 3306
+    protocol: TCP
+  selector:
+    app: cloudsqlproxy
